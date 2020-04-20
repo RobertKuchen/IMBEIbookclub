@@ -1,0 +1,302 @@
+library(ISLR)
+library(MASS)
+library(ggplot2)
+library(rootSolve)
+
+View(Smarket)
+
+
+train <- (Smarket$Year < 2005)
+
+# Linear Discriminant Analysis
+
+X_Cov <- cov(Smarket$Lag1[train], Smarket$Lag2[train])
+
+X <- cbind(Smarket$Lag1[train], Smarket$Lag2[train])
+
+Mu_Up <- c(mean(Smarket$Lag1[train][Smarket$Direction[train] == "Up"]), 
+           mean(Smarket$Lag2[train][Smarket$Direction[train] == "Up"]))
+
+
+Mu_Down <- c(mean(Smarket$Lag1[train][Smarket$Direction[train] == "Down"]), 
+             mean(Smarket$Lag2[train][Smarket$Direction[train] == "Down"]))
+
+pi_Up <- sum(Smarket$Direction[train] == "Up")/sum(train)
+
+pi_Down <- sum(Smarket$Direction[train] == "Down")/sum(train)
+
+
+var_lag1 <- (sum((Smarket$Lag1[train][Smarket$Direction[train] == "Down"] - 
+        mean(Smarket$Lag1[train][Smarket$Direction[train] == "Down"]))^2) +
+    sum((Smarket$Lag1[train][Smarket$Direction[train] == "Up"] - 
+            mean(Smarket$Lag1[train][Smarket$Direction[train] == "Up"]))^2))/(sum(train) - 2)
+    
+  
+var_lag2 <- (sum((Smarket$Lag2[train][Smarket$Direction[train] == "Down"] - 
+                    mean(Smarket$Lag2[train][Smarket$Direction[train] == "Down"]))^2) +
+               sum((Smarket$Lag2[train][Smarket$Direction[train] == "Up"] - 
+                      mean(Smarket$Lag2[train][Smarket$Direction[train] == "Up"]))^2))/(sum(train) - 2)
+
+
+X_Cov_Matr <- matrix(c(var_lag1, X_Cov, X_Cov, var_lag2), nrow = 2, ncol = 2)
+  
+
+Assigned_Class <- character(sum(train))
+
+Posterior_Up <- numeric(sum(train))
+
+Posterior_Down <- numeric(sum(train))
+
+
+for(i in 1:sum(train)){
+
+  Posterior_Up[i] <- as.numeric(t(X[i,])%*%solve(X_Cov_Matr)%*%Mu_Up - 
+                      0.5*t(Mu_Up)%*%solve(X_Cov_Matr)%*%Mu_Up + log(pi_Up))
+  
+  Posterior_Down[i] <- as.numeric(t(X[i,])%*%solve(X_Cov_Matr)%*%Mu_Down - 
+                                  0.5*t(Mu_Down)%*%solve(X_Cov_Matr)%*%Mu_Down + log(pi_Down))
+  
+  ifelse(Posterior_Up[i] > Posterior_Down[i], Assigned_Class[i] <- "Up",
+         Assigned_Class[i] <- "Down")
+  
+}
+
+
+Both_Posteriors <- data.frame(Down = 
+                              (exp(Posterior_Down)/(exp(Posterior_Up) + exp(Posterior_Down))),
+                              Up =                      
+                              (exp(Posterior_Up)/(exp(Posterior_Up) + exp(Posterior_Down))))
+                                                     
+                    
+head(Both_Posteriors)
+        
+
+
+# Using Inbuilt R-Function 'lda'
+
+
+lda_p_2 <- lda(Direction ~ Lag1 + Lag2, data = Smarket, subset = train)
+
+
+lda_p_2_fit <- predict(lda_p_2)
+
+
+# Comparing Posterior Results
+
+head(Both_Posteriors)
+
+head(lda_p_2_fit$posterior)
+
+
+# Training Data
+
+ggplot(data = Smarket[train,]) + geom_point(aes(x = Lag1, y = Lag2)) +
+  geom_point(aes(x = Lag1, y = Lag2, col = Direction))
+
+
+# Training Data + Decision Boundary
+
+ggplot(data = Smarket[train,])+ geom_point(aes(x = Lag1, y = Lag2)) + 
+  geom_abline(slope = -1.250722, intercept = 0.7272707, lwd = 1.5, col = "green") +
+  geom_point(aes(x = Lag1, y = Lag2, col = lda_p_2_fit$class)) +
+  theme(legend.position = "none")
+
+
+  
+# Test Set
+
+test_predicted <- predict(lda_p_2, newdata = Smarket[!train,])
+
+
+ggplot(data = Smarket[!train,]) + geom_point(aes(x = Lag1, y = Lag2)) +
+  geom_point(aes(x = Lag1, y = Lag2, col = Direction))
+  
+
+
+# Prediction with Decision Boundary
+
+ggplot(data = Smarket[!train,]) + geom_point(aes(x = Lag1, y = Lag2)) +
+  geom_abline(slope = -1.250722, intercept = 0.7272707, lwd = 1.5, col = "green") +
+  geom_point(aes(x = Lag1, y = Lag2, col = test_predicted$class)) +
+  theme(legend.position = "none")
+
+
+# Decision Boundary with actual Outcomes
+
+ggplot(data = Smarket[!train,]) + geom_point(aes(x = Lag1, y = Lag2)) +
+  geom_abline(slope = -1.250722, intercept = 0.7272707, lwd = 1.5, col = "green") +
+  geom_point(aes(x = Lag1, y = Lag2, col = Direction)) +
+  theme(legend.position = "none")
+
+
+table(Smarket[!train,]$Direction, test_predicted$class)
+
+
+
+## Quadratic Discriminant Analysis
+
+
+X <- cbind(Smarket$Lag1[train], Smarket$Lag2[train])
+
+Mu_Up <- c(mean(Smarket$Lag1[train][Smarket$Direction[train] == "Up"]), 
+           mean(Smarket$Lag2[train][Smarket$Direction[train] == "Up"]))
+
+
+Mu_Down <- c(mean(Smarket$Lag1[train][Smarket$Direction[train] == "Down"]), 
+             mean(Smarket$Lag2[train][Smarket$Direction[train] == "Down"]))
+
+pi_Up <- sum(Smarket$Direction[train] == "Up")/sum(train)
+
+pi_Down <- sum(Smarket$Direction[train] == "Down")/sum(train)
+
+
+Cov_Mat_Up <- cov(x = cbind(Smarket$Lag1[train][Smarket$Direction[train] == "Up"], 
+                            Smarket$Lag2[train][Smarket$Direction[train] == "Up"]))
+
+
+Cov_Mat_Down <- cov(x = cbind(Smarket$Lag1[train][Smarket$Direction[train] == "Down"], 
+                              Smarket$Lag2[train][Smarket$Direction[train] == "Down"]))
+
+
+Assigned_Class <- character(sum(train))
+
+Posterior_Up <- numeric(sum(train))
+
+Posterior_Down <- numeric(sum(train))
+
+
+for(i in 1:sum(train)){
+  
+  Posterior_Up[i] <-  - 0.5 * t(X[i,] - Mu_Up) %*% solve(Cov_Mat_Up) %*% (X[i,] - Mu_Up) -
+                        0.5 * log(det(Cov_Mat_Up)) + log(pi_Up)
+  
+  
+  Posterior_Down[i] <-  - 0.5 *t(X[i,] - Mu_Down) %*% solve(Cov_Mat_Down) %*% (X[i,] - Mu_Down) - 
+                                
+                          0.5 * log(det(Cov_Mat_Down)) + log(pi_Down)
+    
+  ifelse(Posterior_Up[i] > Posterior_Down[i], Assigned_Class[i] <- "Up",
+         Assigned_Class[i] <- "Down")
+  
+}
+
+
+
+Both_Posteriors <- data.frame(Down = 
+                    (exp(Posterior_Down)/(exp(Posterior_Up) + exp(Posterior_Down))),
+                              Up =                      
+                    (exp(Posterior_Up)/(exp(Posterior_Up) + exp(Posterior_Down))))
+
+
+head(Both_Posteriors)
+
+
+# Using Inbuilt R-Function 'qda'
+
+
+qda_p_2 <- qda(Direction ~ Lag1 + Lag2, data = Smarket, subset = train)
+
+qda_p_2_fit <- predict(qda_p_2)
+
+
+head(Both_Posteriors)
+
+head(qda_p_2_fit$posterior)
+
+
+
+
+# Training Data
+
+ggplot(data = Smarket[train,]) + geom_point(aes(x = Lag1, y = Lag2)) +
+  geom_point(aes(x = Lag1, y = Lag2, col = Direction))
+
+
+# Training Data + Decision Boundary
+
+
+values_x_2 <- seq(from = min(Smarket$Lag2), to = max(Smarket$Lag2), 
+                  length.out = 998)
+
+values_x_1 <- numeric(length(values_x_2))
+
+for(i in 1:length(values_x_2)){
+  
+  x_2 <- values_x_2[i]
+  
+  model <- function(x_1) {   
+    
+    F1 <- 0.00237924*x_1^2 - 0.0098018 * x_2^2 + 0.00464206 * x_1 * x_2 - 
+      0.05545972 * x_1 - 0.04432836 * x_2 + 0.0435994
+    
+    
+    c(F1 = F1)
+    
+    
+  }
+  
+  ss <- multiroot(f = model, start = 0, maxiter = 100)
+  
+  values_x_1[i] <- ss$root
+  
+}
+
+
+ggplot(data = Smarket[train,])+ geom_point(aes(x = Lag1, y = Lag2)) + 
+  geom_point(aes(x = values_x_1, y = values_x_2), col = "green") +
+  geom_point(aes(x = Lag1, y = Lag2, col = qda_p_2_fit$class)) +
+  theme(legend.position = "none")
+
+
+
+# Test Data + Decision Boundary
+
+test_predicted <- predict(qda_p_2, newdata = Smarket[!train,])
+
+{
+  values_x_2 <- seq(from = min(Smarket$Lag2[!train]) - 0.75 , 
+                    to = max(Smarket$Lag2[!train]) + 0.75, 
+                    length.out = nrow(Smarket) - sum(train))
+  
+  values_x_1 <- numeric(length(values_x_2))
+  
+  for(i in 1:length(values_x_2)){
+    
+    x_2 <- values_x_2[i]
+    
+    model <- function(x_1) {   
+      
+      F1 <- 0.00237924*x_1^2 - 0.0098018 * x_2^2 + 0.00464206 * x_1 * x_2 - 
+        0.05545972 * x_1 - 0.04432836 * x_2 + 0.0435994
+      
+      
+      c(F1 = F1)
+      
+      
+    }
+    
+    ss <- multiroot(f = model, start = 0, maxiter = 100)
+    
+    values_x_1[i] <- ss$root
+    
+  }
+}
+
+
+ggplot(data = Smarket[!train,])+ geom_point(aes(x = Lag1, y = Lag2)) + 
+  geom_point(aes(x = values_x_1, y = values_x_2), col = "green") +
+  geom_point(aes(x = Lag1, y = Lag2, col = test_predicted$class)) +
+  theme(legend.position = "none")
+
+
+
+# Test Data + Decision Boundary, Actual Outcomes
+
+ggplot(data = Smarket[!train,])+ geom_point(aes(x = Lag1, y = Lag2)) + 
+  geom_point(aes(x = values_x_1, y = values_x_2), col = "green") +
+  geom_point(aes(x = Lag1, y = Lag2, col = Smarket$Direction[!train])) +
+  theme(legend.position = "none")
+
+
+table(Smarket$Direction[!train],test_predicted$class)
+
